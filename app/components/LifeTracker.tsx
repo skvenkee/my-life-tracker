@@ -838,19 +838,62 @@ function CalorieTab({ items, onUpdate }: { items: CalorieItem[]; onUpdate: (item
   );
 }
 
-function SettingsTab({ habits, onUpdate }: { habits: Habit[]; onUpdate: (h: Habit[]) => void; }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ title: "", emoji: "⭐", type: "checkbox" as HabitType, category: "discipline" as CategoryId, frequency: "daily" as Frequency, allowComments: false });
-  const EMOJIS = ["⭐","💪","📚","🧘","🏃","💧","🎯","🌿","🛁","💊","🎨","🎵","🚴","📞","🎾","🏋️","🤸","🔥","⏰","🛑","📵","💰"];
+function HabitForm({ initial, onSave, onCancel, title }: {
+  initial: { title: string; emoji: string; type: HabitType; category: CategoryId; frequency: Frequency; allowComments: boolean };
+  onSave: (f: typeof initial) => void;
+  onCancel: () => void;
+  title: string;
+}) {
+  const [form, setForm] = useState(initial);
+  const EMOJIS = ["⭐","💪","📚","🧘","🏃","💧","🎯","🌿","🛁","💊","🎨","🎵","🚴","📞","🎾","🏋️","🤸","🔥","⏰","🛑","📵","💰","😴","🪥","🚶","👪"];
   const FREQS: Frequency[] = ["daily","weekdays","weekends","2x_week","3x_week","weekly"];
+  return (
+    <div style={{ ...S.card, border: `2px solid ${C.gold}`, marginBottom: 16 }}>
+      <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "52px 1fr", gap: 8, marginBottom: 10 }}>
+        <div><label style={S.label}>Icon</label><select value={form.emoji} onChange={e => setForm(p => ({ ...p, emoji: e.target.value }))} style={{ ...S.input, fontSize: 18, padding: "8px 4px" }}>{EMOJIS.map(e => <option key={e} value={e}>{e}</option>)}</select></div>
+        <div><label style={S.label}>Name</label><input style={S.input} placeholder="e.g. No snacking after 8pm" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} /></div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+        <div><label style={S.label}>Category</label><select style={S.input} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value as CategoryId }))}>{CAT_ORDER.map(id => <option key={id} value={id}>{CATEGORIES[id].emoji} {CATEGORIES[id].label}</option>)}</select></div>
+        <div><label style={S.label}>Frequency</label><select style={S.input} value={form.frequency} onChange={e => setForm(p => ({ ...p, frequency: e.target.value as Frequency }))}>{FREQS.map(f => <option key={f} value={f}>{FREQUENCY_LABELS[f]}</option>)}</select></div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        {(["checkbox","time"] as HabitType[]).map(t => <button key={t} onClick={() => setForm(p => ({ ...p, type: t }))} style={{ flex: 1, padding: "9px 0", borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit", background: form.type === t ? C.navy : C.bg, color: form.type === t ? "#fff" : C.muted, border: `1.5px solid ${form.type === t ? C.navy : C.border}` }}>{t === "checkbox" ? "✓ Done/Not done" : "🕐 Log time"}</button>)}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", marginBottom: 12, borderTop: `1px solid ${C.border}` }}>
+        <div><div style={{ fontWeight: 700, fontSize: 14 }}>Allow comments</div><div style={{ fontSize: 12, color: C.muted }}>Show notes field when logging</div></div>
+        <button onClick={() => setForm(p => ({ ...p, allowComments: !p.allowComments }))} style={{ padding: "6px 14px", borderRadius: 20, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit", background: form.allowComments ? C.mintLight : C.bg, color: form.allowComments ? C.mint : C.muted, border: `1.5px solid ${form.allowComments ? C.mint : C.border}` }}>{form.allowComments ? "On" : "Off"}</button>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button style={{ ...btn("primary"), flex: 1, justifyContent: "center" }} onClick={() => { if (form.title.trim()) onSave(form); }}>Save</button>
+        <button style={{ ...btn("ghost"), flex: 1, justifyContent: "center" }} onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 
-  async function addHabit() {
-    if (!form.title.trim()) return;
+function SettingsTab({ habits, habitLogs, onUpdate }: { habits: Habit[]; habitLogs: HabitLog[]; onUpdate: (h: Habit[]) => void; }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<string|null>(null);
+
+  const BLANK = { title: "", emoji: "⭐", type: "checkbox" as HabitType, category: "discipline" as CategoryId, frequency: "daily" as Frequency, allowComments: false };
+
+  function hasHistory(habitId: string) {
+    return habitLogs.some(l => l.habitId === habitId);
+  }
+
+  async function addHabit(form: typeof BLANK) {
     const newHabit: Habit = { id: "h"+Date.now(), ...form, active: true };
     await supabase.from("habits").insert([{ id: newHabit.id, title: newHabit.title, emoji: newHabit.emoji, type: newHabit.type, category: newHabit.category, frequency: newHabit.frequency, active: true, allow_comments: newHabit.allowComments, sort_order: habits.length }]);
     onUpdate([...habits, newHabit]);
-    setForm({ title: "", emoji: "⭐", type: "checkbox", category: "discipline", frequency: "daily", allowComments: false });
     setShowAdd(false);
+  }
+
+  async function saveEdit(habit: Habit, form: typeof BLANK) {
+    await supabase.from("habits").update({ title: form.title, emoji: form.emoji, type: form.type, category: form.category, frequency: form.frequency, allow_comments: form.allowComments }).eq("id", habit.id);
+    onUpdate(habits.map(h => h.id === habit.id ? { ...h, ...form } : h));
+    setEditingId(null);
   }
 
   async function toggleActive(habit: Habit) {
@@ -858,69 +901,94 @@ function SettingsTab({ habits, onUpdate }: { habits: Habit[]; onUpdate: (h: Habi
     onUpdate(habits.map(h => h.id === habit.id ? { ...h, active: !h.active } : h));
   }
 
-  async function toggleComments(habit: Habit) {
-    await supabase.from("habits").update({ allow_comments: !habit.allowComments }).eq("id", habit.id);
-    onUpdate(habits.map(h => h.id === habit.id ? { ...h, allowComments: !h.allowComments } : h));
-  }
-
-  async function deleteHabit(id: string) {
-    await supabase.from("habits").delete().eq("id", id);
-    onUpdate(habits.filter(h => h.id !== id));
+  async function removeOrDeactivate(habit: Habit) {
+    if (hasHistory(habit.id)) {
+      // Has logs — deactivate instead of delete to preserve history
+      await supabase.from("habits").update({ active: false }).eq("id", habit.id);
+      onUpdate(habits.map(h => h.id === habit.id ? { ...h, active: false } : h));
+    } else {
+      await supabase.from("habits").delete().eq("id", habit.id);
+      onUpdate(habits.filter(h => h.id !== habit.id));
+    }
   }
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={S.secTitle}>My Habits</div>
-        <button style={btn("primary")} onClick={() => setShowAdd(true)}>+ Add</button>
+        <button style={btn("primary")} onClick={() => { setShowAdd(true); setEditingId(null); }}>+ Add</button>
       </div>
+
       {showAdd && (
-        <div style={{ ...S.card, border: `2px solid ${C.gold}`, marginBottom: 16 }}>
-          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>New Habit</div>
-          <div style={{ display: "grid", gridTemplateColumns: "52px 1fr", gap: 8, marginBottom: 10 }}>
-            <div><label style={S.label}>Icon</label><select value={form.emoji} onChange={e => setForm(p => ({ ...p, emoji: e.target.value }))} style={{ ...S.input, fontSize: 18, padding: "8px 4px" }}>{EMOJIS.map(e => <option key={e} value={e}>{e}</option>)}</select></div>
-            <div><label style={S.label}>Name</label><input style={S.input} placeholder="e.g. No snacking after 8pm" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} /></div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-            <div><label style={S.label}>Category</label><select style={S.input} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value as CategoryId }))}>{CAT_ORDER.map(id => <option key={id} value={id}>{CATEGORIES[id].emoji} {CATEGORIES[id].label}</option>)}</select></div>
-            <div><label style={S.label}>Frequency</label><select style={S.input} value={form.frequency} onChange={e => setForm(p => ({ ...p, frequency: e.target.value as Frequency }))}>{FREQS.map(f => <option key={f} value={f}>{FREQUENCY_LABELS[f]}</option>)}</select></div>
-          </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            {(["checkbox","time"] as HabitType[]).map(t => <button key={t} onClick={() => setForm(p => ({ ...p, type: t }))} style={{ flex: 1, padding: "9px 0", borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit", background: form.type === t ? C.navy : C.bg, color: form.type === t ? "#fff" : C.muted, border: `1.5px solid ${form.type === t ? C.navy : C.border}` }}>{t === "checkbox" ? "Done/Not done" : "Log time"}</button>)}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", marginBottom: 12, borderTop: `1px solid ${C.border}` }}>
-            <div><div style={{ fontWeight: 700, fontSize: 14 }}>Allow comments</div><div style={{ fontSize: 12, color: C.muted }}>Show notes when logging</div></div>
-            <button onClick={() => setForm(p => ({ ...p, allowComments: !p.allowComments }))} style={{ padding: "6px 14px", borderRadius: 20, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit", background: form.allowComments ? C.mintLight : C.bg, color: form.allowComments ? C.mint : C.muted, border: `1.5px solid ${form.allowComments ? C.mint : C.border}` }}>{form.allowComments ? "On" : "Off"}</button>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={{ ...btn("primary"), flex: 1, justifyContent: "center" }} onClick={addHabit}>Save</button>
-            <button style={{ ...btn("ghost"), flex: 1, justifyContent: "center" }} onClick={() => setShowAdd(false)}>Cancel</button>
-          </div>
-        </div>
+        <HabitForm title="New Habit" initial={BLANK} onSave={addHabit} onCancel={() => setShowAdd(false)} />
       )}
-      {CAT_ORDER.map(catId => { const cat = CATEGORIES[catId]; const catHabits = habits.filter(h => h.category === catId); if (!catHabits.length) return null; return (
-        <div key={catId} style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-            <span style={{ fontSize: 16 }}>{cat.emoji}</span>
-            <span style={{ fontWeight: 800, fontSize: 13, color: cat.color }}>{cat.label}</span>
-            <span style={{ fontSize: 10, color: C.muted }}>({Math.round(cat.weight*100)}%)</span>
-          </div>
-          {catHabits.map(habit => (
-            <div key={habit.id} style={{ ...S.card, padding: "12px 14px", opacity: habit.active ? 1 : 0.5, marginBottom: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 20 }}>{habit.emoji}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{habit.title}</div>
-                  <div style={{ fontSize: 11, color: C.muted }}>{FREQUENCY_LABELS[habit.frequency]} · {habit.type === "checkbox" ? "checkbox" : "time"}{habit.allowComments ? " · comments on" : ""}</div>
-                </div>
-                <button onClick={() => toggleComments(habit)} style={{ padding: "4px 8px", borderRadius: 12, fontWeight: 700, fontSize: 10, cursor: "pointer", fontFamily: "inherit", background: habit.allowComments ? C.purpleLight : C.bg, color: habit.allowComments ? C.purple : C.muted, border: `1px solid ${habit.allowComments ? C.purple : C.border}` }}>💬</button>
-                <button onClick={() => toggleActive(habit)} style={{ padding: "5px 10px", borderRadius: 20, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit", background: habit.active ? C.mintLight : C.bg, color: habit.active ? C.mint : C.muted, border: `1.5px solid ${habit.active ? C.mint : C.border}` }}>{habit.active ? "On" : "Off"}</button>
-                <button onClick={() => deleteHabit(habit.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.coral, fontSize: 15 }}>✕</button>
-              </div>
+
+      {CAT_ORDER.map(catId => {
+        const cat = CATEGORIES[catId];
+        const catHabits = habits.filter(h => h.category === catId);
+        if (!catHabits.length) return null;
+        return (
+          <div key={catId} style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <span style={{ fontSize: 16 }}>{cat.emoji}</span>
+              <span style={{ fontWeight: 800, fontSize: 13, color: cat.color }}>{cat.label}</span>
+              <span style={{ fontSize: 10, color: C.muted }}>({Math.round(cat.weight*100)}%)</span>
             </div>
-          ))}
+            {catHabits.map(habit => {
+              const isEditing = editingId === habit.id;
+              const withHistory = hasHistory(habit.id);
+              return (
+                <div key={habit.id} style={{ marginBottom: 8 }}>
+                  <div style={{ ...S.card, padding: "12px 14px", opacity: habit.active ? 1 : 0.5, marginBottom: 0, border: isEditing ? `2px solid ${cat.color}` : `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 20 }}>{habit.emoji}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>{habit.title}</div>
+                        <div style={{ fontSize: 11, color: C.muted }}>
+                          {FREQUENCY_LABELS[habit.frequency]} · {habit.type === "checkbox" ? "checkbox" : "time"}{habit.allowComments ? " · 💬" : ""}
+                          {withHistory && <span style={{ marginLeft: 6, color: cat.color }}>· 📊 has history</span>}
+                        </div>
+                      </div>
+                      {/* Edit */}
+                      <button
+                        onClick={() => setEditingId(isEditing ? null : habit.id)}
+                        style={{ padding: "4px 8px", borderRadius: 12, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit", background: isEditing ? cat.bg : C.bg, color: isEditing ? cat.color : C.muted, border: `1px solid ${isEditing ? cat.color : C.border}` }}>
+                        ✏️
+                      </button>
+                      {/* On/Off */}
+                      <button onClick={() => toggleActive(habit)} style={{ padding: "5px 10px", borderRadius: 20, fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit", background: habit.active ? C.mintLight : C.bg, color: habit.active ? C.mint : C.muted, border: `1.5px solid ${habit.active ? C.mint : C.border}` }}>{habit.active ? "On" : "Off"}</button>
+                      {/* Delete / Deactivate */}
+                      <button
+                        onClick={() => removeOrDeactivate(habit)}
+                        title={withHistory ? "Has history — will deactivate instead of delete" : "Delete habit"}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: withHistory ? C.muted : C.coral, fontSize: 15, padding: 4 }}>
+                        {withHistory ? "🗃️" : "✕"}
+                      </button>
+                    </div>
+                  </div>
+                  {isEditing && (
+                    <HabitForm
+                      title={`Edit: ${habit.title}`}
+                      initial={{ title: habit.title, emoji: habit.emoji, type: habit.type, category: habit.category, frequency: habit.frequency, allowComments: habit.allowComments }}
+                      onSave={form => saveEdit(habit, form)}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      <div style={{ ...S.card, background: C.bg, border: `1px dashed ${C.border}`, padding: "12px 16px" }}>
+        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+          <strong>✏️ Edit</strong> — change name, icon, category, frequency<br/>
+          <strong>On/Off</strong> — hide from Today without losing data<br/>
+          <strong>🗃️</strong> — habit has history; will deactivate to preserve it<br/>
+          <strong>✕</strong> — permanently delete (only for habits with no history)
         </div>
-      ); })}
+      </div>
     </div>
   );
 }
@@ -1040,7 +1108,7 @@ export default function LifeTracker() {
         {view === "calories"  && <CalorieTab items={calorieItems} onUpdate={setCalorieItems} />}
         {view === "analytics" && <AnalyticsTab habits={habits} habitLogs={habitLogs} meals={meals} dayRatings={dayRatings} />}
         {view === "history"   && <HistoryTab habits={habits} habitLogs={habitLogs} meals={meals} dayRatings={dayRatings} />}
-        {view === "settings"  && <SettingsTab habits={habits} onUpdate={setHabits} />}
+        {view === "settings"  && <SettingsTab habits={habits} habitLogs={habitLogs} onUpdate={setHabits} />}
       </div>
       <div style={S.bottomNav}>
         {NAV.map(n => (
