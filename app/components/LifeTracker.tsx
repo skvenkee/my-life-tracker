@@ -16,7 +16,7 @@ type DayRating = { id: string; date: string; ratings: Record<CategoryId, Rating>
 type Meal = { id: string; mealType: string; description: string; tag: MealTag; portion: Portion; notes?: string; calories?: number; time: string; date: string; isBeverage?: boolean; };
 type CalorieItem = { id: string; name: string; emoji: string; calories: number; category: string; isCustom?: boolean; };
 
-const todayStr = () => new Date().toISOString().split("T")[0];
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
 const nowStr = () => { const d = new Date(); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
 
 const CATEGORIES: Record<CategoryId, { label: string; emoji: string; color: string; bg: string; description: string; weight: number }> = {
